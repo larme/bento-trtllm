@@ -5,13 +5,13 @@ import subprocess
 from typing import AsyncGenerator, Optional
 
 import bentoml
+import fastapi
 import numpy as np
 from annotated_types import Ge, Le
 from typing_extensions import Annotated
-from tensorrt_llm.hlapi import LLM, BuildConfig, KvCacheConfig, SamplingParams
 
 
-MODEL_ID = "meta-llama/Meta-Llama-3-8B-Instruct"
+MODEL_ID = "meta-llama/Meta-Llama-3.1-8B-Instruct"
 
 MAX_TOKENS = 2048
 MAX_NEW_TOKENS = 1024
@@ -27,7 +27,9 @@ PROMPT_TEMPLATE = """<|begin_of_text|><|start_header_id|>system<|end_header_id|>
 
 """
 
+openai_api_app = fastapi.FastAPI()
 
+@bentoml.asgi_app(openai_api_app, path="/")
 @bentoml.service(
     name="bentotrtllm-llama3-8b-insruct-service",
     traffic={
@@ -40,7 +42,13 @@ PROMPT_TEMPLATE = """<|begin_of_text|><|start_header_id|>system<|end_header_id|>
 )
 class TRTLLM:
 
-    def __init__(self) -> None:
+    @bentoml.on_startup
+    async def init(self) -> None:
+        from transformers import AutoTokenizer
+        from tensorrt_llm.llmapi import LLM, BuildConfig, KvCacheConfig, SamplingParams
+        from openai_server import OpenAIServer
+
+        self.tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
         self.kv_cache_config = KvCacheConfig(free_gpu_memory_fraction=0.85)
         self.build_config = BuildConfig(max_batch_size=256, max_seq_len=MAX_TOKENS)
 
@@ -50,7 +58,16 @@ class TRTLLM:
             build_config=self.build_config,
             kv_cache_config=self.kv_cache_config,
         )
+        self.server = OpenAIServer(
+            self.llm,
+            MODEL_ID,
+            self.tokenizer,
+            openai_api_app
+        )
 
+    @bentoml.on_shutdown
+    async def quit_llm(self):
+        self.llm.shutdown()
 
     @bentoml.api
     async def generate(
@@ -59,6 +76,7 @@ class TRTLLM:
         system_prompt: Optional[str] = DEFAULT_SYSTEM_PROMPT,
         max_tokens: Annotated[int, Ge(128), Le(MAX_TOKENS)] = MAX_NEW_TOKENS,
     ) -> AsyncGenerator[str, None]:
+        from tensorrt_llm import SamplingParams
 
         if system_prompt is None:
             system_prompt = DEFAULT_SYSTEM_PROMPT
