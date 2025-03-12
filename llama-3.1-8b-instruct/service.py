@@ -27,11 +27,17 @@ PROMPT_TEMPLATE = """<|begin_of_text|><|start_header_id|>system<|end_header_id|>
 
 """
 
+runtime_image = bentoml.images.PythonImage(base_image="docker.io/nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04", lock_python_packages=False)\
+                              .run("apt-get -y update && apt-get -y install libopenmpi-dev git python3-pip")\
+                              .requirements_file("requirements.txt")
+
 openai_api_app = fastapi.FastAPI()
 
 @bentoml.asgi_app(openai_api_app, path="/")
 @bentoml.service(
-    name="bentotrtllm-llama3-8b-insruct-service",
+    name="bentotrtllm-llama3.1-8b-insruct-service",
+    image=runtime_image,
+    envs=[{'name': 'HF_TOKEN'}, {"name": "UV_INDEX_STRATEGY", "value": "unsafe-best-match"}],
     traffic={
         "timeout": 300,
     },
@@ -42,19 +48,21 @@ openai_api_app = fastapi.FastAPI()
 )
 class TRTLLM:
 
+    hf_model = bentoml.models.HuggingFaceModel(MODEL_ID, exclude=['*.pth', '*.pt'])
+
     @bentoml.on_startup
     async def init(self) -> None:
         from transformers import AutoTokenizer
         from tensorrt_llm.llmapi import LLM, BuildConfig, KvCacheConfig, SamplingParams
         from openai_server import OpenAIServer
 
-        self.tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
+        self.tokenizer = AutoTokenizer.from_pretrained(self.hf_model)
         self.kv_cache_config = KvCacheConfig(free_gpu_memory_fraction=0.85)
         self.build_config = BuildConfig(max_batch_size=256, max_seq_len=MAX_TOKENS)
 
         self.llm = LLM(
-            MODEL_ID,
-            tokenizer=MODEL_ID,
+            self.hf_model,
+            tokenizer=self.hf_model,
             build_config=self.build_config,
             kv_cache_config=self.kv_cache_config,
         )
