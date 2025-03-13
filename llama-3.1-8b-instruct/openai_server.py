@@ -4,7 +4,7 @@ import signal
 from contextlib import asynccontextmanager
 from http import HTTPStatus
 from pathlib import Path
-from typing import AsyncGenerator, AsyncIterator, List, Tuple, TypedDict
+from typing import AsyncGenerator, AsyncIterator, List, Optional, Tuple, TypedDict
 
 import uvicorn
 from fastapi import FastAPI
@@ -67,8 +67,7 @@ class OpenAIServer:
                  llm: LLM,
                  model: str,
                  hf_tokenizer: PreTrainedTokenizer = None,
-                 app = None,
-                 ):
+                 app: Optional[FastAPI] = None,):
         self.llm = llm
         self.tokenizer = hf_tokenizer
 
@@ -406,14 +405,11 @@ class OpenAIServer:
                     if request.echo:
                         output_text = request_output.prompt + output_text
                     idx = prompt_idx * num_repsonse_per_request + gen_idx
-
-                    disaggregated_params = CompletionResponseChoice.to_disaggregated_params(output.disaggregated_params)
                     choice = CompletionResponseChoice(
                         index=idx,
                         text=output_text,
                         stop_reason=output.stop_reason,
                         finish_reason=output.finish_reason,
-                        disaggregated_params=disaggregated_params,
                     )
                     choices[idx] = choice
 
@@ -438,13 +434,11 @@ class OpenAIServer:
 
             promises: List[RequestOutput] = []
             sampling_params = request.to_sampling_params()
-            disaggregated_params = request.to_llm_disaggregated_params()
             for prompt in prompts:
                 promise = self.llm.generate_async(
                     inputs=prompt,
                     sampling_params=sampling_params,
                     streaming=request.stream,
-                    disaggregated_params=disaggregated_params
                 )
                 promises.append(promise)
             generator = merge_promises(promises)

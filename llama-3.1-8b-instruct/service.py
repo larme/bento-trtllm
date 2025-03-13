@@ -10,7 +10,6 @@ import numpy as np
 from annotated_types import Ge, Le
 from typing_extensions import Annotated
 
-
 MODEL_ID = "meta-llama/Meta-Llama-3.1-8B-Instruct"
 
 MAX_TOKENS = 2048
@@ -19,17 +18,12 @@ DEFAULT_SYSTEM_PROMPT = """You are a helpful, respectful and honest assistant. A
 
 If a question does not make any sense, or is not factually coherent, explain why instead of answering something not correct. If you don't know the answer to a question, please don't share false information."""
 
-PROMPT_TEMPLATE = """<|begin_of_text|><|start_header_id|>system<|end_header_id|>
 
-{system_prompt}<|eot_id|><|start_header_id|>user<|end_header_id|>
-
-{user_prompt}<|eot_id|><|start_header_id|>assistant<|end_header_id|>
-
-"""
-
-runtime_image = bentoml.images.PythonImage(base_image="docker.io/nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04", lock_python_packages=False)\
-                              .run("apt-get -y update && apt-get -y install libopenmpi-dev git python3-pip")\
-                              .requirements_file("requirements.txt")
+sys_pkg_cmd = "apt-get -y update && apt-get -y install libopenmpi-dev git python3-pip"
+runtime_image = bentoml.images.PythonImage(
+    base_image="docker.io/nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04",
+    lock_python_packages=False,
+).run(sys_pkg_cmd).requirements_file("requirements.txt")
 
 openai_api_app = fastapi.FastAPI()
 
@@ -70,7 +64,7 @@ class TRTLLM:
             self.llm,
             MODEL_ID,
             self.tokenizer,
-            openai_api_app
+            openai_api_app,
         )
 
     @bentoml.on_shutdown
@@ -89,13 +83,21 @@ class TRTLLM:
         if system_prompt is None:
             system_prompt = DEFAULT_SYSTEM_PROMPT
 
-        prompt = PROMPT_TEMPLATE.format(user_prompt=prompt, system_prompt=system_prompt)
-        sampling_params = SamplingParams(max_new_tokens=max_tokens)
+        messages = [
+            dict(role="system", content=system_prompt),
+            dict(role="user", content=prompt),
+        ]
+        prompt = self.tokenizer.apply_chat_template(
+            conversation=messages,
+            add_generation_prompt=True,
+            tokenize=False,
+        )
+        sampling_params = SamplingParams(max_tokens=max_tokens)
 
         promise = self.llm.generate_async(
             prompt,
             streaming=True,
-            sampling_params=sampling_params
+            sampling_params=sampling_params,
         )
 
         async for output in promise:
