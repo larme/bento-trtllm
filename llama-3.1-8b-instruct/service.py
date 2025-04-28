@@ -19,9 +19,9 @@ DEFAULT_SYSTEM_PROMPT = """You are a helpful, respectful and honest assistant. A
 If a question does not make any sense, or is not factually coherent, explain why instead of answering something not correct. If you don't know the answer to a question, please don't share false information."""
 
 
-sys_pkg_cmd = "apt-get -y update && apt-get -y install libopenmpi-dev git python3-pip"
-runtime_image = bentoml.images.PythonImage(
-    base_image="docker.io/nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04",
+sys_pkg_cmd = "DEBIAN_FRONTEND=noninteractive apt-get -y update && DEBIAN_FRONTEND=noninteractive apt-get -y install libopenmpi-dev git python3-pip"
+runtime_image = bentoml.images.Image(
+    base_image="docker.io/nvidia/cuda:12.8.1-cudnn-devel-ubuntu24.04",
     lock_python_packages=False,
 ).run(sys_pkg_cmd).requirements_file("requirements.txt")
 
@@ -31,7 +31,12 @@ openai_api_app = fastapi.FastAPI()
 @bentoml.service(
     name="bentotrtllm-llama3.1-8b-insruct-service",
     image=runtime_image,
-    envs=[{'name': 'HF_TOKEN'}, {"name": "UV_INDEX_STRATEGY", "value": "unsafe-best-match"}],
+    envs=[
+        {'name': 'HF_TOKEN'},
+        {"name": "UV_INDEX_STRATEGY", "value": "unsafe-best-match"},
+        {"name": "UV_COMPILE_BYTECODE", "value": "1"},
+        {"name": "PIP_BREAK_SYSTEM_PACKAGES", "value": "1"},
+    ],
     traffic={
         "timeout": 300,
     },

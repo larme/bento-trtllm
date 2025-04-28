@@ -1,9 +1,8 @@
 --extra-index-url https://pypi.nvidia.com
-bentoml>=1.4.2
-tensorrt==10.8.0.43
-tensorrt-llm==0.17.0.post1
-tensorrt_cu12==10.8.0.43
-tensorrt_cu12_bindings==10.8.0.43
-tensorrt_cu12_libs==10.8.0.43
-flashinfer @ git+https://github.com/flashinfer-ai/flashinfer.git@06309c4e
-s2wrapper @ git+https://github.com/bfshi/scaling_on_scales.git@60da2afe
+bentoml>=1.4.12
+tensorrt==10.9.0.34
+tensorrt_cu12==10.9.0.34
+tensorrt_cu12_bindings==10.9.0.34
+tensorrt_cu12_libs==10.9.0.34
+tensorrt_llm==0.18.2
+flashinfer-python==0.2.5
